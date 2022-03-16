@@ -1,0 +1,37 @@
+#导入模块
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+#定义url和请求头
+url='https://s.weibo.com/top/summary?Refer=top_hot&topnav=1&wvr=6'
+#User-Agent在网页右键-检查-网络-标头（拉到底）-UserAgent
+#cookie在稍微上面一点的位置。cookie的作用是用来模拟登录，
+#没有cookie的话是没办法拿到热搜界面的元素的
+headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36",
+         "cookie":"SUB=_2AkMVWgFMf8NxqwJRmfgdy2Pjbo92zArEieKjBvCXJRMxHRl-yT92ql4OtRB6Ptovo79Az1rkVjGd8VrvJy5EsO-JyMph; SINAGLOBAL=5670908733317.736.1645895403485; _s_tentry=www.google.com.hk; UOR=www.baidu.com,weibo.com,www.google.com.hk; Apache=8688727667907.068.1647344754084; ULV=1647344754107:3:2:2:8688727667907.068.1647344754084:1647336205965"}
+         
+#发送请求
+response=requests.get(url,headers=headers)
+#decode种类包括GB2312,GBK,UTF-8,UTF-16
+content=response.content.decode('utf8')
+
+#实例化BeautifulSoup对象
+soup = BeautifulSoup(content,'lxml')#lxml, html.parser, html5lib
+
+#提取数据
+tds=soup.find_all('td',class_="td-02")[1:]#从第二个开始，因为第一个是置顶.
+
+weibos=[]
+for td in tds:
+    #热搜的内容
+    event = td.find_all('a')[0].string #[0]表示只取文本内容
+    #print(event)
+    hot = td.find_all('span')[0].string
+    #print(event,hot)
+    weibo={"关键词":event,
+           "热度":hot
+    }
+    weibos.append(weibo)
+pd.DataFrame(weibos)
+
