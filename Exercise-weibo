@@ -34,4 +34,3 @@ for td in tds:
     }
     weibos.append(weibo)
 pd.DataFrame(weibos)
-
