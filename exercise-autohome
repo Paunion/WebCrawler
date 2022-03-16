@@ -1,0 +1,66 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+#定义url和请求头
+url='https://www.autohome.com.cn/news/'
+#User-Agent在网页右键-检查-网络-标头（拉到底）-UserAgent
+#cookie在稍微上面一点的位置。cookie的作用是用来模拟登录，
+#在微博的案例中, headers中没有cookie的话是没办法拿到热搜界面的元素的
+headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36",
+         }
+         
+         #把前五页的循环先写出来
+urls=[]#五页的url组成的list
+for i in range(1,6):
+    url='https://www.autohome.com.cn/news/{}/#liststart'.format(i)#把i循环放进{}
+    urls.append(url)
+print(urls)
+
+div=[]
+news=[]
+#遍历所有的url
+for url in urls: #由于是把前5页提取出来，且在每一页上进行下列重复爬虫操作，因此把页码循环前置
+    try: #try是试错
+        #发送请求
+        response=requests.get(url,headers=headers)
+        content=response.content.decode('gb2312') #gb2312,gbk,utf8. 这个可以在检查元素的最上面<head><meta charset="gb2312"></head>确认数据文本类型
+        #print(content)
+        #实例化BeautifulSoup
+        soup=BeautifulSoup(content,'lxml') #lxml, html5lib, html.parser三种解码器.其中html.parser是python内置的
+        #print(soup.prettify())
+        #到这一步为止，prettify()且print出来的就已经是网页检查元素中的东西了
+        
+        #提取新闻部分
+        divs=soup.find_all('div',class_="article-wrapper")
+        #print(divs)
+        
+        for div in divs:
+            #提取标题放进列表内方便后面的for循环
+            titles=list(div.find_all('h3')) #通过标签<h3>来识别标题
+            
+            #提取发布时间
+            times=list(div.find_all('span',class_="fn-left")) #通过标签span和分类class来识别发布时间检查原文:<span class='fn-left'>
+            #提取文本
+            profiles=list(div.find_all('p')) #通过标签<p>来识别文本
+            #print(titles,times,profiles)
+            
+            #zip()函数: 用于将可迭代的对象作为参数，将对象中对应的元素打包成一个个元组，然后返回由这些元组组成的列表
+            #此处不用zip函数是跑不出循环来的
+            for title,time,profile in zip(titles,times,profiles):
+                title=title.string #.string提取html字符串
+                time=time.string
+                profile=profile.string
+                
+                #将提取出来的数据放进字典里，方便后面放进数据框进行查阅
+                #每一条消息生成一条car_news
+                car_news={
+                    "标题":title,
+                    "时间":time,
+                    "评论":profile}
+                #将每一条car_news放进news列表中
+                news.append(car_news)
+    except:#上面这个东西如果成功就继续下去，不成功就跳过
+        continue
+        
+pd.DataFrame(news)
