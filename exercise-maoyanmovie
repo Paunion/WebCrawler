@@ -1,0 +1,58 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import numpy as np
+
+headers={'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'
+         }
+         
+#把前五页的循环先写出来
+urls=[]#五页的url组成的list
+for i in np.arange(0,100,10):
+    url='https://www.maoyan.com/board/4?timeStamp=1647411916343&channelId=40011&index=5&signKey=1ab9867190294f058cbf0b7e78dd771a&sVersion=1&webdriver=false&offset={}'.format(i)#把i循环放进{}
+    urls.append(url)
+print(urls)
+
+info=[]
+scores=[]
+for url in urls:
+    response=requests.get(url,headers=headers)
+    content=response.content.decode('utf8')
+    soup=BeautifulSoup(content,'lxml')
+    #提取主体部分
+    dls=soup.find_all('dl',class_='board-wrapper')
+    #对相关内容进行提取
+    for dl in dls:
+        #提取title:
+        titles=list(dl.find_all('p',class_='name'))
+        #print(titles)
+    
+        #提取主演:
+        stars=list(dl.find_all('p',class_='star'))
+        #print(stars)
+    
+        #提取上映时间:
+        times=list(dl.find_all('p',class_='releasetime'))
+        #print(times)
+    
+        #提取评分整数部分和小数部分, 并且合成为一个带小数的字符串:
+        integers=list(dl.find_all('i',class_='integer'))
+        fractions=list(dl.find_all('i',class_='fraction'))
+        for integer,fraction in zip(integers,fractions):
+            score_temporary=integer.string+fraction.string
+            scores.append(integer.string+fraction.string)
+        
+            #压缩包批量操作
+        for title, star, time,score in zip(titles,stars,times,scores):
+            title=title.string
+            star=star.string.strip()[3:]
+            time=time.string[5:]
+            detail={
+                "电影名":title,
+                "影星":star,
+                "上映时间":time,
+                "评分":score
+                    }
+            info.append(detail)
+            
+pd.DataFrame(info)
