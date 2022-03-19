@@ -1,0 +1,103 @@
+import sys
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys #这个包是用来模拟键盘输入的
+from time import sleep
+import pandas as pd
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
+import pyexcel
+
+#前三句话是用来屏蔽提示:Chrome正受到自动测试软件的控制
+opt=Options()
+opt.add_experimental_option('excludeSwitches',['enable-automation'])
+driver = webdriver.Chrome(options=opt)
+#下面的代码脚本使打开网页前，window.navigator.webdriver赋值为undefined
+#如果不这么操作，webdriver的赋值为true，就会导致去哪儿侦测到webdriver,然后爬虫失败，无法加载.
+#方法来源:https://www.cnblogs.com/presleyren/p/12936553.html
+driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+  "source": """
+    Object.defineProperty(navigator, 'webdriver', {
+      get: () => undefined
+    })
+  """
+})
+driver.get('https://flight.qunar.com')#这行代码一定要和上面的赋值代码在同一个框内执行
+sleep(3)
+
+#找到目的地输入框的位置
+dest=driver.find_element_by_xpath('//input[@name="toCity"]')
+#输入目的地"成都"
+dest.send_keys('成都')
+sleep(3)
+
+#回车键确认输入
+dest.send_keys(Keys.RETURN)
+#等待三秒
+sleep(3)
+
+#点击"搜索"键
+driver.find_element_by_xpath('//button[@class="btn_search"]').click()
+
+#等待页面加载完成,再继续执行后续代码.若超过设置时间无法检测到页面加载完成的信号则抛出异常
+#检查某元素是否出现使用webdriverwait+until+precence_of_element_located
+#WebDriverWait(driver,time_out,poll_frequency,ignored_exception=None)
+#driver表示驱动，表示10秒内每隔0.5秒(poll_frequency默认等于0.5)扫描1次页面变化，直到指定的元素
+#被加载出来
+WebDriverWait(driver,10).until(
+    ec.presence_of_element_located((By.XPATH,'//div[@class="intercept-pop"]/div[@class="btn-box"]'))
+    )
+#疫情提示框加载完毕以后，再继续点击确定
+driver.find_element_by_xpath('.//div[@class="intercept-pop"]/div[@class="btn-box"]').click()
+#ec下的element_to_be_clickable与presence_of_element_located对比
+#element_to_be_clickable的clickable一般指的是判断输入框是否clickable
+#presence_of_element_located用于判断目标元素是否渲染加载完成
+
+#这里要确定航班数据是否加载完成,加载完成则继续.
+WebDriverWait(driver,10).until(
+    ec.presence_of_all_elements_located(
+        (By.XPATH,'//div[@class="b-airfly"]')
+    )
+)
+#加载完成,把所有航班信息的部分提取为变量flights.
+flights=driver.find_elements_by_xpath('//div[@class="b-airfly"]')
+
+info=[]
+for f in flights:
+    #提取航空公司信息
+    airlines=f.find_element_by_xpath('.//div[@class="air"]').text
+    #提取出发信息
+    depart=f.find_element_by_xpath('.//div[@class="sep-lf"]').text.replace("\n"," ")
+    #提取飞行时长
+    duration=f.find_element_by_xpath('.//div[@class="sep-ct"]').text
+    #提取到达信息
+    dest=f.find_element_by_xpath('.//div[@class="sep-rt"]').text.replace("\n"," ")
+    #价格处理部分较复杂
+    #fake_price位虚假值, 不会体现在网页上但是不留意便会爬错.
+    fake_price=list(f.find_element_by_xpath('.//span[@class="prc_wp"]/em/b[1]').text)
+    #covers里是真实值,也是网页上面展示给我们看的价格.
+    covers=f.find_elements_by_xpath('.//span[@class="prc_wp"]/em/b[position()>1]')
+    
+    for c in covers:
+        #通过元素偏移量来确定数字在真实价格中处于个位,十位,百位,千位; left属性表示偏移量的
+        #left出来是-18px,只取数字部分，所以用[:-2]
+        #size出来是{'height': ,'width': }
+        #left[-2:]除以size['width']得到:-1表示个位,-2表示十位,-3表示百位,-4表示千位.
+        index=int(c.value_of_css_property('left')[:-2])//c.size['width']
+        fake_price[index]=c.text
+    #''.join()用法: 
+    #'|'.join([a,b,c])运行后得到a|b|c;
+    #''.join([a,b,c])运行后得到abc.
+    price=''.join(fake_price)
+    #把信息都放进一个空字典,再放进一个列表,再放进数据框.
+    info.append({
+        "航空公司":airlines,
+        "出发信息":depart,
+        "飞行时长":duration,
+        "到达信息":dest,
+        "价格":price
+    })
+print(pd.DataFrame(info))
+driver.quit()
