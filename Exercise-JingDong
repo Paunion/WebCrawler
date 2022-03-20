@@ -1,0 +1,82 @@
+import sys
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys #这个包是用来模拟键盘输入的
+from time import sleep
+import pandas as pd
+from selenium.webdriver.chrome.options import Options
+
+#if__name__=='__main__'表示下面的代码仅作为脚本在本文件内运行
+#当本文件被import到另一个文件时，脚本不会被运行
+if __name__ == '__main__':
+    #sys.argv是从程序外部获取参数的桥梁。#第一列是路径，后面的是从程序外部获取的参数信息
+    #如果=1，说明只有只有路径。大于1，说明正常执行。
+    if len(sys.argv)>1: 
+        keyword = sys.argv[1]
+    #隐藏chrome页面，省去页面渲染。
+    option=Options()
+    option.add_argument('--headless')
+    wd=webdriver.Chrome(options=option)#隐藏chrome页面，省去页面渲染。
+    wd.get('https://www.jd.com')
+
+    kw=wd.find_element_by_id('key')
+    kw.send_keys('iphone')
+    kw.send_keys(Keys.RETURN)#回车键
+    
+    #间隔5秒
+    sleep(3)
+
+    #点击销量排序
+    sort_by_sales=wd.find_element_by_xpath('//div[@class="f-sort"]/a[2]')
+    sort_by_sales.click()
+    
+    row=[]
+
+    has_next=True
+    while has_next:
+        #间隔3秒，为了方便页面加载
+        sleep(3)
+        #先获取整个商品区域的尺寸坐标
+        goods_list=wd.find_element_by_id('J_goodsList')
+        y=goods_list.rect['y']+goods_list.rect['height']
+        wd.execute_script('window.scrollTo(0,{})'.format(y))#format格式化函数把y放进{}
+        #间隔三秒方便下面的商品加载
+        sleep(3)
+
+        cur_page=wd.find_element_by_xpath('//div[@id="J_bottomPage"]//a[@class="curr"]').text
+        print('-----current page is %s-----'%cur_page)#这个用来看当前界面到第几页了
+        
+        #获取所有商品节点
+        #这里必须要用到element(s)因为这里要把所有的商品都抓去出来.
+        products=wd.find_elements_by_class_name("gl-item")
+        
+        #价格没有特殊标记, 只能先定位到每一个商品了.商品的唯一标识符叫data-sku
+        for p in products:
+            sku=p.get_attribute('data-sku')#这一步可要可不要，sku相当于商品id
+            #由于我们已经有了for p in product,因此每次循环查找都是在单个商品内
+            #因此下面的代码find_element不用加s.
+            price=p.find_element_by_tag_name('strong').text
+            #xpath里加.表示取当前元素为根节点向下查找元素,不加.是以整个页面为根元素向下查找的全局路径
+            name=p.find_element_by_xpath('.//div[@class="p-name p-name-type-2"]/a/em').text.replace('\n','')
+            comments=p.find_element_by_xpath('.//div[@class="p-commit"]/strong/a').text
+            shop=p.find_element_by_xpath('.//div[@class="p-shop"]').text
+            data={
+                "价格":price,
+                "商品名称":name,
+                "评论数":comments,
+                "店铺名称":shop
+            }
+            row.append(data)
+        
+        #判断一下有否最后一页:如果是,那么next_page的class里面是没disabled的
+        #如是最后一页:那么next_page的class里面是有disabled的
+        next_page=wd.find_element_by_xpath('.//div[@id="J_bottomPage"]/span[@class="p-num"]/a[last()]')
+        if 'disabled' in next_page.get_attribute('class'):
+            has_next=False
+        else:
+            next_page.click()    
+    
+  wd.quit()
+    
+total=pd.DataFrame(row)
+print(total)
